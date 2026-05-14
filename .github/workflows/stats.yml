@@ -1,0 +1,64 @@
+name: Electron Windows Download Stats
+
+on:
+  workflow_dispatch: # This adds the manual "Run" button
+
+jobs:
+  gather-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch and Process Data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node -e "
+          const https = require('https');
+
+          const getPage = (page) => new Promise((resolve) => {
+            const url = \`https://api.github.com/repos/electron/electron/releases?per_page=100&page=${page}\`;
+            https.get(url, {
+              headers: {
+                'User-Agent': 'node',
+                'Authorization': \`token \${process.env.GH_TOKEN}\`
+              }
+            }, (res) => {
+              let data = '';
+              res.on('data', c => data += c);
+              res.on('end', () => resolve(JSON.parse(data)));
+            });
+          });
+
+          (async () => {
+            const windows = ['win32-x64', 'win32-ia32', 'win32-arm64'];
+            const cutoffDate = new Date('2025-09-01'); // Sept 1st last year
+            let allRelevantReleases = [];
+            let page = 1;
+            let keepGoing = true;
+
+            while (keepGoing) {
+              const releases = await getPage(page);
+              if (!releases || !Array.isArray(releases) || releases.length === 0) break;
+
+              for (const r of releases) {
+                const releaseDate = new Date(r.published_at);
+                if (releaseDate >= cutoffDate) {
+                  allRelevantReleases.push(r);
+                } else {
+                  keepGoing = false;
+                  break;
+                }
+              }
+              page++;
+            }
+
+            const stats = allRelevantReleases.map(r => ({
+              version: r.tag_name,
+              date: r.published_at.split('T')[0],
+              downloads: r.assets
+                .filter(a => windows.some(w => a.name.includes(w)))
+                .reduce((sum, a) => sum + a.download_count, 0)
+            }));
+
+            console.table(stats);
+          })();
+          "
