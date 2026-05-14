@@ -1,4 +1,4 @@
-name: Electron Windows Stats (Fast Mode)
+name: Electron Windows Stats (Sorted)
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   gather-stats:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch Stable Releases Only
+      - name: Fetch and Sort Stats
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -35,7 +35,7 @@ jobs:
             let page = 1;
             let keepGoing = true;
 
-            console.log('Fetching stable releases...');
+            console.log('Fetching and filtering...');
 
             while (keepGoing && page <= 5) {
               const releases = await getPage(page);
@@ -43,8 +43,6 @@ jobs:
 
               for (const r of releases) {
                 const releaseDate = new Date(r.published_at);
-                
-                // FILTER: Only look at Stable releases (no 'nightly', 'beta', or 'alpha' in the name)
                 const isStable = !r.tag_name.includes('nightly') && !r.tag_name.includes('beta') && !r.tag_name.includes('alpha');
 
                 if (releaseDate >= cutoffDate) {
@@ -63,7 +61,12 @@ jobs:
               page++;
             }
 
-            console.log('--- STABLE WINDOWS DOWNLOADS ---');
-            console.table(stats);
+            // THE FIX: Sort by downloads (Highest to Lowest)
+            const sortedStats = stats
+              .sort((a, b) => b.downloads - a.downloads)
+              .slice(0, 20); // Only show top 20 to keep it clean
+
+            console.log('--- TOP 20 STABLE WINDOWS RELEASES (Since Sept 2025) ---');
+            console.table(sortedStats);
           })();
           "
