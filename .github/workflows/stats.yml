@@ -1,4 +1,4 @@
-name: Electron Windows Stats (Sorted)
+name: Electron Windows Stats (Unique & Sorted)
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   gather-stats:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch and Sort Stats
+      - name: Fetch Unique Stats
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -31,11 +31,11 @@ jobs:
           (async () => {
             const windows = ['win32-x64', 'win32-ia32', 'win32-arm64'];
             const cutoffDate = new Date('2025-09-01');
-            let stats = [];
+            let versionMap = new Map(); // Use a Map to handle duplicates
             let page = 1;
             let keepGoing = true;
 
-            console.log('Fetching and filtering...');
+            console.log('Fetching data...');
 
             while (keepGoing && page <= 5) {
               const releases = await getPage(page);
@@ -51,7 +51,10 @@ jobs:
                       .filter(a => windows.some(w => a.name.includes(w)))
                       .reduce((sum, a) => sum + a.download_count, 0);
                     
-                    stats.push({ version: r.tag_name, date: r.published_at.split('T')[0], downloads });
+                    // If we haven't seen this version, or this one has more downloads, save it
+                    if (!versionMap.has(r.tag_name) || downloads > versionMap.get(r.tag_name).downloads) {
+                        versionMap.set(r.tag_name, { version: r.tag_name, date: r.published_at.split('T')[0], downloads });
+                    }
                   }
                 } else {
                   keepGoing = false;
@@ -61,12 +64,12 @@ jobs:
               page++;
             }
 
-            // THE FIX: Sort by downloads (Highest to Lowest)
-            const sortedStats = stats
+            // Convert Map back to array and sort
+            const sortedStats = Array.from(versionMap.values())
               .sort((a, b) => b.downloads - a.downloads)
-              .slice(0, 20); // Only show top 20 to keep it clean
+              .slice(0, 20);
 
-            console.log('--- TOP 20 STABLE WINDOWS RELEASES (Since Sept 2025) ---');
+            console.log('--- TOP 20 UNIQUE STABLE RELEASES ---');
             console.table(sortedStats);
           })();
           "
